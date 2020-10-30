@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+
+    <title>HDFS Web Client</title>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css" integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2" crossorigin="anonymous">
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- Load polyfills to support older browsers -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es2015%2CIntersectionObserver"></script>
+
+    <!-- Required scripts -->
+    <script src="https://unpkg.com/vue@latest/dist/vue.js"></script>
+    <!-- jQuery and JS bundle w/ Popper.js -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx" crossorigin="anonymous"></script>
+    
+    <style>
+        html, body, #app{
+            min-height: 100vw;
+        }
+        body{
+            font-family: 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+        #app{
+            background-image: url("https://www.toptal.com/designers/subtlepatterns/patterns/dark-honeycomb.png")
+        }
+        .nowrap{ white-space: nowrap; }
+
+        .card-content{
+            min-height: 7em;
+        }
+
+        .card-deck .card:hover .card-header{
+            background-color: #343a40!important;
+            color: white
+        }
+    </style>
+    
+  </head>
+  <body>
+    <!-- Our application root element -->
+    <div id="app" class="bg-dark ">
+        <div class="d-flex flex-column flex-md-row align-items-center p-3 px-md-4 mb-3 bg-white border-bottom shadow-sm">
+            <h5 class="my-0 mr-md-auto font-weight-normal">Distributed Storage Labs</h5>
+            <nav class="my-2 my-md-0 mr-md-3">
+                <img src="au_logo.jpg" class="mx-2" style="height: 30px">
+                <img src="netx_logo.jpg" class="mx-2" style="height: 30px">
+            </nav> 
+        </div>
+
+        <div class="pricing-header px-3 py-3 pt-md-5 pb-md-4 mx-auto text-center text-white">
+            <h1 class="display-4">HDFS Web Client</h1>
+            <p class="lead">
+                <span v-if="!server_address_set">Test your local mini HDFS</span>
+                <span v-else>Using server {{server_address}} <small><a href="#" @click.prevent="server_address_set=false" class="ml-1 text-white" style="text-decoration: underline;">Change</a></small></span>
+            </p>
+        </div>
+
+        <div class="row mb-4" v-if="error">
+            <div class="col-6 offset-3">
+                <div class="alert alert-danger">
+                    <span v-html="error"></span>
+                    <button type="button" class="close" @click="error=null" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                      </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="container" v-if="!server_address_set">
+            <div class="col-6 offset-3">
+                <div class="card mb-4 shadow-sm ">
+                    <div class="card-header">
+                        <h4 class="my-0 font-weight-normal">Set Namenode Address</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group d-flex align-items-center justify-content-center">
+                            <div class="nowrap mr-2">Namenode Address: </div>
+                            <input type="text" class="form-control d-inline-block" v-model="server_address">
+                            <button type="button" class="btn btn-primary" @click="set_server_address()">Set</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div v-else class="container">
+
+            
+
+            <div class="card-deck mb-3 text-center">
+                <div class="card mb-4 shadow-sm">
+                    <div class="card-header">
+                        <h4 class="my-0 font-weight-normal">List Files</h4>
+                    </div>
+                    <div class="card-body card-content text-left">
+                        
+                        <div v-if="filelist !== null">
+                            <section v-if="filelist.length">
+                                <div v-for="file in filelist" :key="file.id">
+                                    <div>[{{file.id}}] <strong>{{file.filename}}</strong> <small class="ml-2 text-muted">{{file.size}} bytes</small></div>
+                                    <div class="mt-2 text-muted d-flex align-items-top justify-content-between" >
+                                        <small>{{ file.created }}<br/>{{file.type}}</small>
+                                        <div>
+                                            <div v-for="(ip,idx) in file.replica_locations.split(' ')" :key="idx" style="font-family: monospace">{{ip}}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                            <div v-else class="text-center"><i>No files stored</i></div>
+                        </div>
+                        <div v-else class="card-title pricing-card-title text-muted">Load files using the button below</div>
+
+                    </div>
+                    <div class="card-body pt-0">
+                        <button type="button" class="btn btn-lg btn-block btn-primary" @click="list_files()">List stored files</button>
+                    </div>
+                </div>
+
+                <div class="card mb-4 shadow-sm">
+                    <div class="card-header">
+                        <h4 class="my-0 font-weight-normal">Upload File</h4>
+                    </div>
+                    <div class="card-body card-content">
+                        
+                        <div class="mb-4">
+                            <span class="nowrap mr-2">Select a file:</span>
+                            <input type="file" class="form-control d-inline-block" @change="evt => file_selected(evt)" id="file-input">
+                        </div>
+                    </div>
+                    <div class="card-body pt-0">
+                        <button type="button" class="btn btn-lg btn-block " :disabled="!upload_enabled" :class="{'btn-primary': upload_enabled, 'btn-secondary': !upload_enabled}" @click="upload()">Upload</button>
+                    </div>
+                </div>
+
+                <div class="card mb-4 shadow-sm">
+                <div class="card-header">
+                    <h4 class="my-0 font-weight-normal">Download File</h4>
+                </div>
+                <div class="card-body card-content">
+                    <div class="d-flex align-items-center mb-4 justify-content-center">
+                        <span class="nowrap mr-2">File ID:</span>
+                        <input type="number" v-model.number="file_id_download" class="form-control d-inline-block" style="width: 80px">
+                    </div>
+                </div>
+                <div class="card-body pt-0">
+                    <button type="button" class="btn btn-lg btn-block btn-primary" :disabled="file_id_download==null" @click="download_file()">Download</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Start running your app -->
+    <script>
+      window.app = new Vue({
+        el: '#app',
+        data(){
+            return {
+                server_address_set: false,
+                server_address: "http://localhost:9000",
+                error: null,
+
+                filelist: null,
+                file_id_download: null,
+
+                upload_enabled: false,
+                upload_file: null,
+            }
+        },
+
+        mounted(){
+            const stored_ns_address = localStorage.getItem('namenode_address')
+            if(stored_ns_address){
+                this.server_address = stored_ns_address
+                this.server_address_set = true
+                this.list_files()
+            }
+        },
+        methods: {
+            set_server_address(){
+                if(!this.server_address.length){
+                    return
+                }
+
+                try{
+                    fetch(this.server_address).then(res => {
+                        if(res.ok){
+                            return res.json()
+                        }
+                        throw "no namenode"
+                    }).then(res => {
+                        if(res && res.message && res.message.toLowerCase().indexOf('namenode') >= 0){
+                            this.server_address_set = true
+                            localStorage['namenode_address'] = this.server_address
+                            this.list_files()
+                        }
+                        else{
+                            throw "no namenode"
+                        }
+                    }).catch(e => {
+                        this.error = "No namenode found at " + this.server_address
+                    })
+                } catch(e){
+                    console.error("Error trying server: ", e)
+                    this.error = "No namenode found at " + this.server_address
+                }
+
+                
+            },
+
+            list_files(){
+                this.filelist = []
+                fetch(this.server_address + "/files").then(res => {
+                    if(!res.ok){
+                        console.error("Error listing files: ", res)
+                        this.error = "Error listing files: " + "HTTP "+ res.status + ": " + res.statusText
+                        return
+                    }
+                    return res.json()
+                }).then(response => {
+                    this.filelist = response.files
+                })
+            },
+
+            file_selected(event){
+                if(!event.target || !event.target.files || event.target.files.length !== 1){
+                    this.upload_enabled = false
+                    return
+                }
+                
+                this.upload_file = event.target.files[0]
+                this.upload_enabled = true
+            },
+
+            upload(){
+                if(!this.upload_enabled){return}
+
+                const namenode_payload = {
+                    filename: this.upload_file.name,
+                    size: this.upload_file.size,
+                    type: this.upload_file.type
+                }
+                
+                fetch(this.server_address + "/files", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(namenode_payload)
+                }).then(res => {
+                    if(!res.ok){
+                        throw "Error creating file in Namenode: HTTP " + res.status
+                    }
+                    // Parse response JSON
+                    return res.json()
+                }).then(result => {
+                    // Ok, we got the new file ID and replica locations array
+                    const file_id = result.id
+                    const replica_locations = result.replica_locations
+                    // Use Javascript FormData to construct a multipart request payload that has
+                    // both binary data and ordinary fields
+                    /*
+                    let datanode_payload = new FormData()
+                    datanode_payload.append('file', this.upload_file)
+                    datanode_payload.append('file_id', file_id)
+                    datanode_payload.append('replica_locations', replica_locations.join(' '))
+                    */
+                    // Read the file contents
+                    let reader = new FileReader()
+                    var self = this
+                    reader.onloadend = () => {
+                        let file_b64 = reader.result
+                        // Cut off the beginning "data:application/pdf;base64,"
+                        const idx = file_b64.indexOf(';base64,')
+                        file_b64 = file_b64.slice(idx+';base64,'.length)
+                        self.upload_to_datanode(file_b64, file_id, replica_locations)
+                    }
+                    reader.readAsDataURL(this.upload_file)
+                    
+                }).catch(err => {
+                    this.error = err
+                })
+
+            },
+
+            upload_to_datanode(file_contents_b64, file_id, replica_locations){
+                
+                // Select a random replica location that we'll send the request to,
+                // and remove it from the locations array
+                const random_array_index = Math.floor(Math.random() * replica_locations.length)
+                // Use the Javascript array.splice() method that removes an element by index and returns it
+                const target_dn = replica_locations.splice(random_array_index, 1)
+                
+                let payload = {
+                    "file_id": file_id,
+                    "replica_locations": replica_locations,
+                    "file_data": file_contents_b64
+                }
+
+                // Send the file to the selected Datanode
+                fetch(target_dn + '/write', {
+                    method: 'POST',
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(payload)
+                }).then(res => { 
+                    if(!res.ok){
+                        throw "Error storing file at Datanode: HTTP " + res.status
+                    }
+                    // OK, the file was successfully uploaded. Refresh the file list
+                    this.list_files()
+                    this.upload_file = null
+                    this.upload_enabled = false
+                    document.getElementById("file-input").value = null
+                })
+            },
+
+            download_file(){
+                const file = this.filelist.find(f => f.id == this.file_id_download)
+                if(!file){
+                    this.error = "File "+this.file_id_download+" does not exist"
+                    return
+                }
+
+                // Select a random datanode to download from
+                const arr = file.replica_locations.split(' ')
+                const random_array_index = Math.floor(Math.random() * arr.length)
+                const target_dn = arr.splice(random_array_index, 1)
+
+                fetch(target_dn+'/read/'+file.id).then(res => {
+                    if(!res.ok){
+                        this.error = "Failed to download " + file.name
+                        return
+                    }
+                    return res.arrayBuffer()
+                }).then(file_data => {
+                    let blob = new Blob([file_data], {type: file.type})
+                    let url = window.URL.createObjectURL(blob)
+                    var a = document.createElement('a')
+                    document.body.appendChild(a)
+                    a.href = url;
+                    a.target = '_blank'
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+
+                    this.file_id_download = null
+                }).catch(err => {
+                    this.error = "Error downloading "+file.filename
+                })
+            }
+        }
+      })
+    </script>
+  </body>
+</html>
